@@ -1,45 +1,12 @@
 const { Sequelize, DataTypes } = require('sequelize');
-const { Client } = require('pg');
 const readline = require('readline-sync');
 const { DateTime } = require('luxon');
 
-const dbConfig = {
-    user: 'postgres',
-    host: 'localhost',
-    password: 'java',
-    port: 5432,
-    database: 'postgres', 
-};
-
-const DATABASE_NAME = 'clinica_db';
-
-async function createDatabase() {
-    const client = new Client(dbConfig);
-    try {
-        await client.connect();
-        const result = await client.query(
-            `SELECT 1 FROM pg_database WHERE datname = $1`,
-            [DATABASE_NAME]
-        );
-        if (result.rowCount === 0) {
-            await client.query(`CREATE DATABASE ${DATABASE_NAME}`);
-            console.log(`Banco de dados '${DATABASE_NAME}' criado com sucesso!`);
-        } else {
-            console.log(`Banco de dados '${DATABASE_NAME}' já existe.`);
-        }
-    } catch (error) {
-        console.error('Erro ao verificar/criar o banco de dados:', error);
-    } finally {
-        await client.end();
-    }
-}
-
-const sequelize = new Sequelize(DATABASE_NAME, 'postgres', 'java', {
+const sequelize = new Sequelize('clinica_db', 'postgres', 'java', {
     host: 'localhost',
     dialect: 'postgres',
 });
 
-// Definição dos modelos
 const Paciente = sequelize.define('Paciente', {
     cpf: {
         type: DataTypes.STRING,
@@ -82,23 +49,18 @@ const Agendamento = sequelize.define('Agendamento', {
     },
 });
 
-// Inicializa o banco de dados e sincroniza os modelos
+Paciente.hasMany(Agendamento, { foreignKey: 'cpf', as: 'agendamentos' });
+Agendamento.belongsTo(Paciente, { foreignKey: 'cpf', as: 'paciente' });
+
 (async () => {
     try {
-        // Criação do banco, se necessário
-        await createDatabase();
-
-        // Conexão e sincronização
         await sequelize.authenticate();
         console.log('Conexão bem-sucedida com o banco de dados.');
-
         await sequelize.sync();
-        console.log('Modelos sincronizados com o banco de dados.');
     } catch (error) {
-        console.error('Erro ao inicializar o banco de dados:', error);
+        console.error('Erro ao conectar com o banco de dados:', error);
     }
 })();
-
 
 // Funções refatoradas para usar Sequelize
 async function cadastrarPaciente() {
@@ -176,7 +138,9 @@ async function agendarConsulta() {
 
 async function listarAgenda() {
     try {
-        const agendamentos = await Agendamento.findAll({ include: Paciente });
+        const agendamentos = await Agendamento.findAll({
+            include: [{ model: Paciente, as: 'paciente' }],
+        });
         if (agendamentos.length === 0) {
             console.log('Nenhum agendamento encontrado.');
             return;
@@ -184,12 +148,13 @@ async function listarAgenda() {
 
         console.log('Data       Hora Inicial  Hora Final  Nome do Paciente');
         agendamentos.forEach(a => {
-            console.log(`${a.data}   ${a.horaInicial}   ${a.horaFinal}   ${a.Paciente.nome}`);
+            console.log(`${a.data}   ${a.horaInicial}   ${a.horaFinal}   ${a.paciente.nome}`);
         });
     } catch (error) {
         console.error('Erro ao listar agenda:', error);
     }
 }
+
 
 // Menu principal
 async function menuPrincipal() {
